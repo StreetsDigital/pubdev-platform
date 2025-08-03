@@ -1,0 +1,100 @@
+# Production Docker Compose
+# Optimized for production deployment with security and performance
+
+services:
+  # Main PubDev Platform Frontend (Next.js Production)
+  pubdev-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: PubDev-Frontend-Prod
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SERVICE_DISCOVERY_MODE=docker_compose
+      - AGENTS_SERVICE_URL=http://pubdev-agents:8052
+      - REDIS_URL=redis://pubdev-redis:6379
+    networks:
+      - pubdev-network
+    depends_on:
+      - pubdev-agents
+      - pubdev-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Sub-Agents Service (AI Processing)
+  pubdev-agents:
+    build:
+      context: .
+      dockerfile: Dockerfile.agents
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: PubDev-Agents-Prod
+    ports:
+      - "8052:8052"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SERVICE_DISCOVERY_MODE=docker_compose
+      - LOG_LEVEL=INFO
+      - SUB_AGENTS_CONCURRENCY=5
+    networks:
+      - pubdev-network
+    volumes:
+      - agents_data:/app/data
+      - agents_logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8052/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis (Production configuration)
+  pubdev-redis:
+    image: redis:7-alpine
+    container_name: PubDev-Redis-Prod
+    command: >
+      redis-server 
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - pubdev-network
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  pubdev-network:
+    driver: bridge
+
+volumes:
+  agents_data:
+  agents_logs:
+  redis_data:

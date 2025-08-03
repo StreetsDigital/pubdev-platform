@@ -1,0 +1,40 @@
+# PubDev Platform Sub-Agents Service
+# Lightweight service for AI agent processing
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create requirements file for sub-agents
+COPY requirements.agents.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.agents.txt
+
+# Copy sub-agents source
+COPY src/sub-agents/ src/sub-agents/
+COPY src/__init__.py src/
+
+# Create directories for agent operations
+RUN mkdir -p logs temp data
+
+# Set environment variables
+ENV PYTHONPATH="/app:$PYTHONPATH"
+ENV PYTHONUNBUFFERED=1
+
+# Expose port for sub-agents API
+EXPOSE 8052
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8052/health')"
+
+# Start sub-agents service
+CMD ["python", "-m", "src.sub-agents.main", "--host", "0.0.0.0", "--port", "8052"]
