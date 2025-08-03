@@ -4,9 +4,13 @@
   "description": "AI-powered publisher development automation platform with dual-workflow architecture",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently \"npm run ws\" \"next dev\"",
+    "dev:next": "next dev",
+    "dev:ws": "tsx src/lib/websocket/init.ts",
+    "ws": "tsx src/lib/websocket/init.ts",
     "build": "next build",
-    "start": "next start",
+    "start": "concurrently \"npm run ws\" \"next start\"",
+    "start:next": "next start",
     "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -59,7 +63,9 @@
     "bcryptjs": "^2.4.3",
     "@types/bcryptjs": "^2.4.0",
     "dotenv": "^16.3.0",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "concurrently": "^8.2.0",
+    "tsx": "^4.6.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",
