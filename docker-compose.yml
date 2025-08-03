@@ -1,0 +1,122 @@
+services:
+  # Main PubDev Platform Frontend (Next.js)
+  pubdev-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: PubDev-Frontend
+    ports:
+      - "3000:3000"
+      - "3002:3002"  # Sub-agents API port
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=http://localhost:3000
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUB_AGENTS_ENABLED=true
+      - SUB_AGENTS_CONCURRENCY=3
+      - SERVICE_DISCOVERY_MODE=docker_compose
+      - AGENTS_SERVICE_URL=http://pubdev-agents:8052
+    networks:
+      - pubdev-network
+    volumes:
+      - ./src:/app/src  # Hot reload for development
+      - ./public:/app/public
+      - node_modules:/app/node_modules
+    depends_on:
+      - pubdev-agents
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Sub-Agents Service (AI Processing)
+  pubdev-agents:
+    build:
+      context: .
+      dockerfile: Dockerfile.agents
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: PubDev-Agents
+    ports:
+      - "8052:8052"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SERVICE_DISCOVERY_MODE=docker_compose
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SUB_AGENTS_CONCURRENCY=3
+    networks:
+      - pubdev-network
+    volumes:
+      - ./src/sub-agents:/app/src/sub-agents  # Hot reload for agent development
+      - agents_data:/app/data
+      - agents_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8052/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Database (Optional local PostgreSQL for development)
+  # Uncomment if you want local database instead of Supabase cloud
+  # pubdev-db:
+  #   image: postgres:15-alpine
+  #   container_name: PubDev-Database
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     - POSTGRES_DB=pubdev_platform
+  #     - POSTGRES_USER=pubdev_user
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD:-pubdev_password}
+  #   networks:
+  #     - pubdev-network
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./supabase/migrations:/docker-entrypoint-initdb.d
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U pubdev_user -d pubdev_platform"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+  # Redis (For caching and session management)
+  pubdev-redis:
+    image: redis:7-alpine
+    container_name: PubDev-Redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - pubdev-network
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  pubdev-network:
+    driver: bridge
+
+volumes:
+  node_modules:
+  agents_data:
+  agents_logs:
+  redis_data:
+  # postgres_data:  # Uncomment if using local database
